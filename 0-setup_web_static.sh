@@ -1,14 +1,43 @@
 #!/usr/bin/env bash
-# Write a Bash script that sets up your web servers for the deployment of web_static
+# Set up the directory tree and Nginx configuration for web_static.
 
-apt-get update
-apt-get -y install nginx
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
 
-mkdir -p /data/web_static/releases/test/
-mkdir -p /data/web_static/shared/
+$SUDO apt-get update -y >/dev/null 2>&1
+$SUDO apt-get install -y nginx >/dev/null 2>&1
 
-echo "<h1>Abimbola Ronald</h1>" > /data/web_static/releases/test/index.html
-ln -sf /data/web_static/releases/test/ /data/web_static/current
-chown -R ubuntu:ubuntu /data/
-sudo sed -i '/listen 80 default_server/a location /hbnb_static { alias /data/web_static/current/;}' /etc/nginx/sites-enabled/default
-sudo service nginx restart
+$SUDO mkdir -p \
+    /data/web_static/releases/test \
+    /data/web_static/shared
+
+printf '%s\n' '<html><body>Web static is working!</body></html>' |
+    $SUDO tee /data/web_static/releases/test/index.html >/dev/null
+
+$SUDO rm -f /data/web_static/current
+$SUDO ln -s /data/web_static/releases/test /data/web_static/current
+
+$SUDO chown -R ubuntu:ubuntu /data
+
+NGINX_SITE="/etc/nginx/sites-available/default"
+LOCATION_START="        # BEGIN hbnb_static"
+LOCATION_END="        # END hbnb_static"
+
+if $SUDO test -f "$NGINX_SITE"; then
+    $SUDO sed -i "/$LOCATION_START/,/$LOCATION_END/d" "$NGINX_SITE"
+    $SUDO sed -i "/^[[:space:]]*location \\/[[:space:]]*{/i\\
+$LOCATION_START\\
+        location /hbnb_static/ {\\
+            alias /data/web_static/current/;\\
+        }\\
+$LOCATION_END\\
+" "$NGINX_SITE"
+fi
+
+$SUDO nginx -t >/dev/null 2>&1
+$SUDO service nginx restart >/dev/null 2>&1
+
+exit 0
